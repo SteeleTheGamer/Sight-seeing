@@ -12,6 +12,7 @@ SPEED = 5
 # Visual and collision dimensions
 IMAGE_HEIGHT = 100         # visual height of sprite
 HITBOX_HEIGHT = 68         # smaller hitbox height (feet area)
+HITBOX_WIDTH = 75
 JUMP_POWER = 15
 GRAVITY = 1
 
@@ -30,7 +31,9 @@ LEVEL1 = [Wall, Wallb, pygame.Rect(0, 500, 800, 40), pygame.Rect(500, 400, 200, 
 LEVEL2 = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(100, 220, 100, 20), pygame.Rect(120, 120, 700, 20), pygame.Rect(-150, 320, 250, 20)] #medium -> big -> small
 LEVEL3 = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(-75, 500, 375, 40), pygame.Rect(500, 250, 700, 20)] #yea
 LEVEL4 = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(-250, 500, 325, 40)]
-LEVEL5 = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(-250, 500, 850, 40)]
+LEVEL67 = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(500, 400, 200, 20), pygame.Rect(0, 500, 800, 40)]
+LEVEL2BUFF = [pygame.Rect(100, 220, 500, 20), pygame.Rect(100, 120, 700, 20), pygame.Rect(-100, 320, 200, 20)] #medium -> big -> small = final level
+LEVELFLOOR = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(0, 500, 800, 40)]
 LEVELS = [LEVEL1, LEVEL2, LEVEL3, LEVEL4]
 
 
@@ -50,6 +53,13 @@ class Springsv:
         self.direction = direction
     def draw(self, surface):
         surface.blit(self.image, self.rect.topleft)
+class Spikes:
+    def __init__(self, x, y, direction = 1):
+        image_original = pygame.image.load("tophatspike.png").convert_alpha()
+        self.image = pygame.transform.scale(image_original, (50, 50))
+        self.rect = self.image.get_rect(topleft = (x, y))
+    def draw(self, surface):
+        surface.blit(self.image, self.rect.topleft)
 #portal goobers
 class Portals:
     def __init__(self, x, y):
@@ -61,16 +71,10 @@ class Portals:
 class Player:
     def __init__(self, x, y):
         # Load and scale image
-        image_original = pygame.image.load("goober.png").convert_alpha()
-        scale_factor = IMAGE_HEIGHT / image_original.get_height()
-        new_width = int(image_original.get_width() * scale_factor)
-        self.image = pygame.transform.scale(image_original, (new_width, IMAGE_HEIGHT))
-
-        # The visible image is drawn *above* the collision box (hitbox)
-        self.image_offset_y = -(IMAGE_HEIGHT - HITBOX_HEIGHT)
+        self.image = pygame.image.load("goober.png").convert_alpha()
 
         # Hitbox (placed so feet match visual feet)
-        self.rect = pygame.Rect(x, y, new_width, HITBOX_HEIGHT)
+        self.rect = pygame.Rect(x, y, HITBOX_WIDTH, HITBOX_HEIGHT)
 
         self.vel_y = 0
         self.vel_x = 0
@@ -121,34 +125,57 @@ class Player:
                         self.rect.left = plat.right
     def spring_collisions(self, springs, springsv):
         for spring in springs:
-            if self.rect.colliderect(spring):
+            if self.rect.colliderect(spring.rect):
                 if self.vel_y > 0 and self.rect.bottom <= spring.rect.top + self.vel_y:
                     self.vel_y = -JUMP_POWER * 1.5
         for sprin in springsv:
-            if self.rect.colliderect(sprin):
+            if self.rect.colliderect(sprin.rect):
                 #if self.vel_x > 0 and self.rect.left <= sprin.rect.right + self.vel_x:
                 self.vel_x += sprin.direction * SPEED * 2
+    def spike_collisions(self, spikes):
+        for spike in spikes:
+            if self.rect.colliderect(spike):
+                exit()
 
-    def update(self, platforms, springs, springsv):
+    def update(self, platforms, springs, springsv, spikes):
         self.apply_gravity()
         self.check_collisions(platforms)
         self.spring_collisions(springs, springsv)
+        self.spike_collisions(spikes)
     def draw(self, surface):
-        draw_x = self.rect.x
-        draw_y = self.rect.y + -self.image_offset_y - 32  # draw image above the hitbox
+        draw_x = self.rect.centerx - self.image.get_width() // 2
+        draw_y = self.rect.bottom - self.image.get_height()
         surface.blit(self.image, (draw_x, draw_y))
 def leveldata(levelindex):
     # Spring layout
     SLEVEL3 = [Springs(250, 450)]
     SLEVEL4 = [Springs(100, 430), Springs(350, 220)]
     SLEVEL5 = [Springs(25, 500), Springs(100, 500), Springs(175, 500), Springs(250, 500), Springs(325, 500), Springs(400, 500), Springs(475, 500), Springs(550, 500), Springs(625, 500), Springs(700, 500)]
-    SVLEVEL5 = [Springsv(5, 10, 1), Springsv(5, 75, 1), Springsv(5, 150, 1), Springsv(5, 225, 1), Springsv(5, 300, 1), Springsv(5, 375, 1), Springsv(5, 450, 1), Springsv(775, 10, -1), Springsv(775, 75, -1), Springsv(775, 150, -1), Springsv(775, 225, -1), Springsv(775, 300, -1), Springsv(775, 375, -1), Springsv(775, 450, -1), ]
+    SLEVEL67 = [Springs(500,375)]
+    SLEVEL8 = [Springs(240, 450)]
+    SVLEVEL5 = [Springsv(5, 10, 1), Springsv(5, 75, 1), Springsv(5, 150, 1), Springsv(5, 225, 1), Springsv(5, 300, 1), Springsv(5, 375, 1), Springsv(5, 450, 1), Springsv(775, 10, -1), Springsv(775, 75, -1), Springsv(775, 150, -1), Springsv(775, 225, -1), Springsv(775, 300, -1), Springsv(775, 375, -1), Springsv(775, 450, -1)]
+    SPLEVEL6 = [Spikes(250, 450)]
+    SPLEVEL7 = [Spikes(250, 450), Spikes(300, 450)]
+    SPLEVEL8 = [Spikes(300, 450), Spikes(350, 450), Spikes(400, 450), Spikes(450, 450), Spikes(500, 450), Spikes(550, 450)]
+    SPLEVEL1BUFF = [Spikes(510, 350)]
+    SPLEVEL3BUFF = [Spikes(475, 250)]
+    SPLEVEL67BUFF = [Spikes(200, 450), Spikes(250, 450), Spikes(285, 450)]
 
+    #2 max jump, 4.5 max dash, 6.5 max spring, 1.10 height is max.
+    #if levelindex == 0:
+    #    platforms = LEVEL1
+    #    portal = Portals(730, 240)
+    #    springs = []
+    #    springsv = []
+    #    spikes = []
+    #    x = 25
+    #    y = 200
     if levelindex == 0:
         platforms = LEVEL1
-        portal = Portals(730, 260)
-        springs = SLEVEL5
-        springsv = SVLEVEL5
+        portal = Portals(730, 240)
+        springs = []
+        springsv = []
+        spikes = []
         x = 25
         y = 200
     elif levelindex == 1:
@@ -156,6 +183,7 @@ def leveldata(levelindex):
         portal = Portals(730, 50)
         springs = []
         springsv = []
+        spikes = []
         x = 25
         y = 200
     elif levelindex == 2:
@@ -163,6 +191,7 @@ def leveldata(levelindex):
         portal = Portals(730, 200)
         springs = SLEVEL3
         springsv = []
+        spikes = []
         x = 25
         y = 200
     elif levelindex == 3:
@@ -170,6 +199,7 @@ def leveldata(levelindex):
         portal = Portals(730, 260)
         springs = SLEVEL4
         springsv = []
+        spikes = []
         x = 25
         y = 200
     elif levelindex == 4:
@@ -177,16 +207,82 @@ def leveldata(levelindex):
         portal = Portals(400, 150)
         springsv = SVLEVEL5
         springs = SLEVEL5
+        spikes = []
         x = 10
         y = 300
+    elif levelindex == 5:
+        platforms = LEVEL67
+        portal = Portals(400, 150)
+        springsv = []
+        springs = SLEVEL67
+        spikes = SPLEVEL6
+        x = 10
+        y = 300
+    elif levelindex == 6:
+        platforms = LEVEL67
+        portal = Portals(400, 155)
+        springsv = []
+        springs = SLEVEL67
+        spikes = SPLEVEL7
+        x = 10
+        y = 300
+    elif levelindex == 7:
+        platforms = LEVELFLOOR
+        portal = Portals(700, 450)
+        springsv = []
+        springs = SLEVEL8
+        spikes = SPLEVEL8
+        x = 10
+        y = 300
+    elif levelindex == 8:
+        platforms = LEVEL1
+        portal = Portals(730, 240)
+        springs = []
+        springsv = []
+        spikes = SPLEVEL1BUFF
+        x = 25
+        y = 200
+    elif levelindex == 9:
+        platforms = LEVEL2BUFF #Lvl 2 buffed with text "Lets get a little crazy with all the levels you just did... but harder"
+        portal = Portals(730, 50)
+        springs = []
+        springsv = []
+        spikes = []
+        x = 25
+        y = 200
+    elif levelindex == 10:
+        platforms = LEVEL3 #Lvl 3 buffed
+        portal = Portals(730, 50)
+        springs = SLEVEL3
+        springsv = []
+        spikes = SPLEVEL3BUFF
+        x = 25
+        y = 200
+    elif levelindex == 11:
+        platforms = LEVEL67 #Lvl 6 buffed
+        portal = Portals(700, 450)
+        springs = []
+        springsv = []
+        spikes = SPLEVEL67BUFF
+        x = 25
+        y = 200
+    elif levelindex == 12:
+        platforms = LEVEL67 #Lvl 7 buffed with text "Do it again"
+        portal = Portals(700, 450)
+        springs = []
+        springsv = []
+        spikes = SPLEVEL67BUFF
+        x = 25
+        y = 200
     else:
         platforms = LEVEL1
         portal = None
         springs = []
         springsv = []
+        spikes = []
         x = 25
         y = 200
-    return platforms, portal, springs, springsv, x, y
+    return platforms, portal, springs, springsv, x, y, spikes
 def draw_grid(surface):
     for x in range(0, SCREEN_WIDTH, GRID_SPACING):
         pygame.draw.line(surface, GRID_COLOR, (x, 0), (x, SCREEN_HEIGHT))
@@ -201,7 +297,7 @@ def main():
     # Start player at correct grounded position
 
     indexlevel = 0
-    platforms, portal, springs, springsv, x, y = leveldata(indexlevel)
+    platforms, portal, springs, springsv, x, y, spikes = leveldata(indexlevel)
     player = Player(x, y)
 
 
@@ -216,10 +312,10 @@ def main():
                 running = False
 
         player.handle_input(keys)
-        player.update(platforms, springs, springsv)
+        player.update(platforms, springs, springsv, spikes)
         if portal and player.rect.colliderect(portal.rect):
             indexlevel += 1
-            platforms, portal, springs, springsv, x, y = leveldata(indexlevel)
+            platforms, portal, springs, springsv, x, y, spikes = leveldata(indexlevel)
             player.vel_y = 0
             player.rect.x = x
             player.rect.y = y
@@ -233,10 +329,14 @@ def main():
             spring.draw(screen)
         for sprin in springsv:
             sprin.draw(screen)
+        for spike in spikes:
+            spike.draw(screen)
+            pygame.draw.rect(screen, (255, 0, 0), spike.rect, 2)  # Hitbox debug
         if portal:
             portal.draw(screen)
         player.draw(screen)
-        #pygame.draw.rect(screen, (255, 0, 0), player.rect, 2)  # Debug hitbox
+        pygame.draw.rect(screen, (255, 0, 0), player.rect, 2)  # Hitbox debug
+
         pygame.display.flip()
 
     pygame.quit()
