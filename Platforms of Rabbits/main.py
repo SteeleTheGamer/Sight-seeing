@@ -1,18 +1,19 @@
-import pygame
+# Web/pygbag-ready version
+import asyncio
+import pygame as pg
 import sys
+from pathlib import Path
 
-#boss fight, falling enemy boss projectiles, coins, shop, secret room with chester who has a gun.
-
-# Game settings
+# -------- Game settings --------
 FPS = 60
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 SPEED = 5
 
-# Visual and collision dimensions
-IMAGE_HEIGHT = 100         # visual height of sprite
-HITBOX_HEIGHT = 68         # smaller hitbox height (feet area)
-HITBOX_WIDTH = 75
+# Visual & collision
+IMAGE_HEIGHT = 100
+HITBOX_HEIGHT = 68
+HITBOX_WIDTH  = 75
 JUMP_POWER = 15
 GRAVITY = 1
 
@@ -20,97 +21,109 @@ GRAVITY = 1
 PLATFORM_COLOR = (0, 0, 0)
 BG_COLOR = (200, 220, 255)
 GRID_SPACING = 50
-GRID_COLOR = (180, 200, 230)  # Light blue-gray for visibility on BG
+GRID_COLOR = (180, 200, 230)
 
-#LEVEL2 = [pygame.Rect(100, 220, 500, 20), pygame.Rect(100, 120, 700, 20), pygame.Rect(-100, 320, 200, 20)] #medium -> big -> small = final level
+# -------- Assets helper (web-safe) --------
+ASSETS = Path("assets")
 
-# Platform layout
-Wall = pygame.Rect(-20, 0, 10, 600)
-Wallb = pygame.Rect(810, 100, 100000000, 500)
-LEVEL1 = [Wall, Wallb, pygame.Rect(0, 500, 800, 40), pygame.Rect(500, 400, 200, 20), pygame.Rect(700, 320, 100, 20)] #big -> medium -> small
-LEVEL2 = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(100, 220, 100, 20), pygame.Rect(120, 120, 700, 20), pygame.Rect(-150, 320, 250, 20)] #medium -> big -> small
-LEVEL3 = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(-75, 500, 375, 40), pygame.Rect(500, 250, 700, 20)] #yea
-LEVEL4 = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(-250, 500, 325, 40)]
-LEVEL67 = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(500, 400, 200, 20), pygame.Rect(0, 500, 800, 40)]
-LEVEL2BUFF = [pygame.Rect(100, 220, 500, 20), pygame.Rect(100, 120, 700, 20), pygame.Rect(-100, 320, 200, 20)] #medium -> big -> small = final level
-LEVELFLOOR = [pygame.Rect(-50, 0, 10, 600), Wallb, pygame.Rect(0, 500, 800, 40)]
-LEVELS = [LEVEL1, LEVEL2, LEVEL3, LEVEL4]
+def load_image(name, size=None):
+    """
+    Load image from assets/ with convert_alpha.
+    On failure, draw a magenta 'missing' placeholder so the game still runs.
+    """
+    p = ASSETS / name
+    try:
+        img = pg.image.load(p.as_posix()).convert_alpha()
+        if size:
+            img = pg.transform.scale(img, size)
+        return img
+    except Exception as e:
+        w, h = size if size else (64, 64)
+        surf = pg.Surface((w, h), pg.SRCALPHA)
+        surf.fill((255, 0, 255, 180))
+        f = pg.font.Font(None, 18)
+        surf.blit(f.render("missing", True, (0, 0, 0)), (6, h//2 - 8))
+        print(f"[WARN] Could not load {p}: {e}")
+        return surf
 
+# -------- Level geometry --------
+Wall  = pg.Rect(-20, 0, 10, 600)
+# Avoid huge widths in the browser; big numbers can cause canvas/perf issues
+Wallb = pg.Rect(810, 100, 5000, 500)
 
+LEVEL1    = [Wall, Wallb, pg.Rect(0, 500, 800, 40), pg.Rect(500, 400, 200, 20), pg.Rect(700, 320, 100, 20)]
+LEVEL2    = [pg.Rect(-50, 0, 10, 600), Wallb, pg.Rect(100, 220, 100, 20), pg.Rect(120, 120, 700, 20), pg.Rect(-150, 320, 250, 20)]
+LEVEL3    = [pg.Rect(-50, 0, 10, 600), Wallb, pg.Rect(-75, 500, 375, 40), pg.Rect(500, 250, 700, 20)]
+LEVEL4    = [pg.Rect(-50, 0, 10, 600), Wallb, pg.Rect(-250, 500, 325, 40)]
+LEVEL67   = [pg.Rect(-50, 0, 10, 600), Wallb, pg.Rect(500, 400, 200, 20), pg.Rect(0, 500, 800, 40)]
+LEVEL2BUFF= [pg.Rect(100, 220, 500, 20), pg.Rect(100, 120, 700, 20), pg.Rect(-100, 320, 200, 20)]
+LEVELFLOOR= [pg.Rect(-50, 0, 10, 600), Wallb, pg.Rect(0, 500, 800, 40)]
+LEVELS    = [LEVEL1, LEVEL2, LEVEL3, LEVEL4]
+
+# -------- Entities --------
 class Springs:
     def __init__(self, x, y):
-        image_original = pygame.image.load("spring.png").convert_alpha()
-        self.image = pygame.transform.scale(image_original, (75, 63))
-        self.rect = self.image.get_rect(topleft = (x, y))
-    def draw(self, surface):
-        surface.blit(self.image, self.rect.topleft)
+        self.image = load_image("spring.png", (75, 63))
+        self.rect  = self.image.get_rect(topleft=(x, y))
+    def draw(self, surface): surface.blit(self.image, self.rect.topleft)
 
 class Springsv:
-    def __init__(self, x, y, direction = 1):
-        image_original = pygame.image.load("pixil-frame-0 (76).png").convert_alpha()
-        self.image = pygame.transform.scale(image_original, (24, 63))
-        self.rect = self.image.get_rect(topleft = (x, y))
+    def __init__(self, x, y, direction=1):
+        # If you rename this file, update the string here.
+        self.image = load_image("pixil-frame-0 (76).png", (24, 63))
+        self.rect  = self.image.get_rect(topleft=(x, y))
         self.direction = direction
-    def draw(self, surface):
-        surface.blit(self.image, self.rect.topleft)
+    def draw(self, surface): surface.blit(self.image, self.rect.topleft)
+
 class Spikes:
-    def __init__(self, x, y, direction = 1):
-        image_original = pygame.image.load("tophatspike.png").convert_alpha()
-        self.image = pygame.transform.scale(image_original, (50, 50))
-        self.rect = self.image.get_rect(topleft = (x, y))
-    def draw(self, surface):
-        surface.blit(self.image, self.rect.topleft)
-#portal goobers
+    def __init__(self, x, y, direction=1):
+        self.image = load_image("tophatspike.png", (50, 50))
+        self.rect  = self.image.get_rect(topleft=(x, y))
+    def draw(self, surface): surface.blit(self.image, self.rect.topleft)
+
 class Portals:
     def __init__(self, x, y):
-        image_original = pygame.image.load("portal.png").convert_alpha()
-        self.image = pygame.transform.scale(image_original, (74, 55))
-        self.rect = self.image.get_rect(topleft = (x, y))
-    def draw(self, surface):
-        surface.blit(self.image, self.rect.topleft)
+        self.image = load_image("portal.png", (74, 55))
+        self.rect  = self.image.get_rect(topleft=(x, y))
+    def draw(self, surface): surface.blit(self.image, self.rect.topleft)
+
 class Player:
     def __init__(self, x, y):
-        # Load and scale image
-        self.image = pygame.image.load("goober.png").convert_alpha()
-
-        # Hitbox (placed so feet match visual feet)
-        self.rect = pygame.Rect(x, y, HITBOX_WIDTH, HITBOX_HEIGHT)
-
+        self.image = load_image("goober.png")  # use original size
+        self.rect  = pg.Rect(x, y, HITBOX_WIDTH, HITBOX_HEIGHT)
         self.vel_y = 0
         self.vel_x = 0
         self.on_ground = False
 
     def handle_input(self, keys):
-        if keys[pygame.K_a]:
+        # don't move here; only set desired velocity
+        self.vel_x = 0
+        if keys[pg.K_a] or keys[pg.K_LEFT]:
             self.vel_x = -SPEED
-        if keys[pygame.K_d]:
+        if keys[pg.K_d] or keys[pg.K_RIGHT]:
             self.vel_x = SPEED
-        if keys[pygame.K_LEFT]:
-            self.vel_x = -SPEED
-        if keys[pygame.K_RIGHT]:
-            self.vel_x = SPEED
-        if keys[pygame.K_q]:
-            self.vel_x = SPEED * -2
-        if keys[pygame.K_e]:
+        if keys[pg.K_q]:
+            self.vel_x = -SPEED * 2
+        if keys[pg.K_e]:
             self.vel_x = SPEED * 2
-        self.rect.x += self.vel_x
-
-
-        if keys[pygame.K_SPACE] and self.on_ground:
+        if (keys[pg.K_SPACE] or keys[pg.K_w] or keys[pg.K_UP]) and self.on_ground:
             self.vel_y = -JUMP_POWER
             self.on_ground = False
 
     def apply_gravity(self):
         self.vel_y += GRAVITY
-        self.rect.y += self.vel_y
         self.rect.x += int(self.vel_x)
+        self.rect.y += self.vel_y
+        # friction
         self.vel_x *= 0.8
         if abs(self.vel_x) < 0.2:
             self.vel_x = 0
+
     def check_collisions(self, platforms):
         self.on_ground = False
         for plat in platforms:
             if self.rect.colliderect(plat):
+                # vertical
                 if self.vel_y > 0 and self.rect.bottom - self.vel_y <= plat.top:
                     self.rect.bottom = plat.top
                     self.vel_y = 0
@@ -119,10 +132,12 @@ class Player:
                     self.rect.top = plat.bottom
                     self.vel_y = 0
                 else:
+                    # horizontal
                     if self.rect.centerx < plat.centerx:
                         self.rect.right = plat.left
                     else:
                         self.rect.left = plat.right
+
     def spring_collisions(self, springs, springsv):
         for spring in springs:
             if self.rect.colliderect(spring.rect):
@@ -130,218 +145,145 @@ class Player:
                     self.vel_y = -JUMP_POWER * 1.5
         for sprin in springsv:
             if self.rect.colliderect(sprin.rect):
-                #if self.vel_x > 0 and self.rect.left <= sprin.rect.right + self.vel_x:
                 self.vel_x += sprin.direction * SPEED * 2
+
     def spike_collisions(self, spikes):
+        # FIX: check spike.rect (not spike)
         for spike in spikes:
-            if self.rect.colliderect(spike):
-                exit()
+            if self.rect.colliderect(spike.rect):
+                return True
+        return False
 
     def update(self, platforms, springs, springsv, spikes):
         self.apply_gravity()
         self.check_collisions(platforms)
         self.spring_collisions(springs, springsv)
-        self.spike_collisions(spikes)
+        return self.spike_collisions(spikes)
+
     def draw(self, surface):
         draw_x = self.rect.centerx - self.image.get_width() // 2
         draw_y = self.rect.bottom - self.image.get_height()
         surface.blit(self.image, (draw_x, draw_y))
+
+# -------- Level data --------
 def leveldata(levelindex):
-    # Spring layout
-    SLEVEL3 = [Springs(250, 450)]
-    SLEVEL4 = [Springs(100, 430), Springs(350, 220)]
-    SLEVEL5 = [Springs(25, 500), Springs(100, 500), Springs(175, 500), Springs(250, 500), Springs(325, 500), Springs(400, 500), Springs(475, 500), Springs(550, 500), Springs(625, 500), Springs(700, 500)]
-    SLEVEL67 = [Springs(500,375)]
-    SLEVEL8 = [Springs(240, 450)]
-    SVLEVEL5 = [Springsv(5, 10, 1), Springsv(5, 75, 1), Springsv(5, 150, 1), Springsv(5, 225, 1), Springsv(5, 300, 1), Springsv(5, 375, 1), Springsv(5, 450, 1), Springsv(775, 10, -1), Springsv(775, 75, -1), Springsv(775, 150, -1), Springsv(775, 225, -1), Springsv(775, 300, -1), Springsv(775, 375, -1), Springsv(775, 450, -1)]
-    SPLEVEL6 = [Spikes(250, 450)]
-    SPLEVEL7 = [Spikes(250, 450), Spikes(300, 450)]
-    SPLEVEL8 = [Spikes(300, 450), Spikes(350, 450), Spikes(400, 450), Spikes(450, 450), Spikes(500, 450), Spikes(550, 450)]
+    SLEVEL3  = [Springs(250, 450)]
+    SLEVEL4  = [Springs(100, 430), Springs(350, 220)]
+    SLEVEL5  = [Springs(25, 500), Springs(100, 500), Springs(175, 500), Springs(250, 500),
+                Springs(325, 500), Springs(400, 500), Springs(475, 500), Springs(550, 500),
+                Springs(625, 500), Springs(700, 500)]
+    SLEVEL67 = [Springs(500, 375)]
+    SLEVEL8  = [Springs(240, 450)]
+    SVLEVEL5 = [Springsv(5, 10, 1), Springsv(5, 75, 1), Springsv(5, 150, 1), Springsv(5, 225, 1),
+                Springsv(5, 300, 1), Springsv(5, 375, 1), Springsv(5, 450, 1),
+                Springsv(775, 10, -1), Springsv(775, 75, -1), Springsv(775, 150, -1),
+                Springsv(775, 225, -1), Springsv(775, 300, -1), Springsv(775, 375, -1),
+                Springsv(775, 450, -1)]
+    SPLEVEL6     = [Spikes(250, 450)]
+    SPLEVEL7     = [Spikes(250, 450), Spikes(300, 450)]
+    SPLEVEL8     = [Spikes(300, 450), Spikes(350, 450), Spikes(400, 450), Spikes(450, 450), Spikes(500, 450), Spikes(550, 450)]
     SPLEVEL1BUFF = [Spikes(510, 350)]
     SPLEVEL3BUFF = [Spikes(475, 250)]
-    SPLEVEL67BUFF = [Spikes(200, 450), Spikes(250, 450), Spikes(285, 450)]
+    SPLEVEL67BUFF= [Spikes(200, 450), Spikes(250, 450), Spikes(285, 450)]
 
-    #2 max jump, 4.5 max dash, 6.5 max spring, 1.10 height is max.
-    #if levelindex == 0:
-    #    platforms = LEVEL1
-    #    portal = Portals(730, 240)
-    #    springs = []
-    #    springsv = []
-    #    spikes = []
-    #    x = 25
-    #    y = 200
     if levelindex == 0:
-        platforms = LEVEL1
-        portal = Portals(730, 240)
-        springs = []
-        springsv = []
-        spikes = []
-        x = 25
-        y = 200
+        return LEVEL1,  Portals(730, 240), [],        [],        25, 200, []
     elif levelindex == 1:
-        platforms = LEVEL2
-        portal = Portals(730, 50)
-        springs = []
-        springsv = []
-        spikes = []
-        x = 25
-        y = 200
+        return LEVEL2,  Portals(730,  50), [],        [],        25, 200, []
     elif levelindex == 2:
-        platforms = LEVEL3
-        portal = Portals(730, 200)
-        springs = SLEVEL3
-        springsv = []
-        spikes = []
-        x = 25
-        y = 200
+        return LEVEL3,  Portals(730, 200), SLEVEL3,   [],        25, 200, []
     elif levelindex == 3:
-        platforms = LEVEL4
-        portal = Portals(730, 260)
-        springs = SLEVEL4
-        springsv = []
-        spikes = []
-        x = 25
-        y = 200
+        return LEVEL4,  Portals(730, 260), SLEVEL4,   [],        25, 200, []
     elif levelindex == 4:
-        platforms = LEVEL4
-        portal = Portals(400, 150)
-        springsv = SVLEVEL5
-        springs = SLEVEL5
-        spikes = []
-        x = 10
-        y = 300
+        return LEVEL4,  Portals(400, 150), SLEVEL5,   SVLEVEL5,  10, 300, []
     elif levelindex == 5:
-        platforms = LEVEL67
-        portal = Portals(400, 150)
-        springsv = []
-        springs = SLEVEL67
-        spikes = SPLEVEL6
-        x = 10
-        y = 300
+        return LEVEL67, Portals(400, 150), SLEVEL67,  [],        10, 300, SPLEVEL6
     elif levelindex == 6:
-        platforms = LEVEL67
-        portal = Portals(400, 155)
-        springsv = []
-        springs = SLEVEL67
-        spikes = SPLEVEL7
-        x = 10
-        y = 300
+        return LEVEL67, Portals(400, 155), SLEVEL67,  [],        10, 300, SPLEVEL7
     elif levelindex == 7:
-        platforms = LEVELFLOOR
-        portal = Portals(700, 450)
-        springsv = []
-        springs = SLEVEL8
-        spikes = SPLEVEL8
-        x = 10
-        y = 300
+        return LEVELFLOOR, Portals(700, 450), SLEVEL8, [],       10, 300, SPLEVEL8
     elif levelindex == 8:
-        platforms = LEVEL1
-        portal = Portals(730, 240)
-        springs = []
-        springsv = []
-        spikes = SPLEVEL1BUFF
-        x = 25
-        y = 200
+        return LEVEL1,  Portals(730, 240), [],        [],        25, 200, SPLEVEL1BUFF
     elif levelindex == 9:
-        platforms = LEVEL2BUFF #Lvl 2 buffed with text "Lets get a little crazy with all the levels you just did... but harder"
-        portal = Portals(730, 50)
-        springs = []
-        springsv = []
-        spikes = []
-        x = 25
-        y = 200
+        return LEVEL2BUFF, Portals(730, 50), [],      [],        25, 200, []
     elif levelindex == 10:
-        platforms = LEVEL3 #Lvl 3 buffed
-        portal = Portals(730, 50)
-        springs = SLEVEL3
-        springsv = []
-        spikes = SPLEVEL3BUFF
-        x = 25
-        y = 200
+        return LEVEL3,  Portals(730,  50), SLEVEL3,   [],        25, 200, SPLEVEL3BUFF
     elif levelindex == 11:
-        platforms = LEVEL67 #Lvl 6 buffed
-        portal = Portals(700, 450)
-        springs = []
-        springsv = []
-        spikes = SPLEVEL67BUFF
-        x = 25
-        y = 200
+        return LEVEL67, Portals(700, 450), [],        [],        25, 200, SPLEVEL67BUFF
     elif levelindex == 12:
-        platforms = LEVEL67 #Lvl 7 buffed with text "Do it again"
-        portal = Portals(700, 450)
-        springs = []
-        springsv = []
-        spikes = SPLEVEL67BUFF
-        x = 25
-        y = 200
+        return LEVEL67, Portals(700, 450), [],        [],        25, 200, SPLEVEL67BUFF
     else:
-        platforms = LEVEL1
-        portal = None
-        springs = []
-        springsv = []
-        spikes = []
-        x = 25
-        y = 200
-    return platforms, portal, springs, springsv, x, y, spikes
+        return LEVEL1,  None,              [],        [],        25, 200, []
+
 def draw_grid(surface):
     for x in range(0, SCREEN_WIDTH, GRID_SPACING):
-        pygame.draw.line(surface, GRID_COLOR, (x, 0), (x, SCREEN_HEIGHT))
+        pg.draw.line(surface, GRID_COLOR, (x, 0), (x, SCREEN_HEIGHT))
     for y in range(0, SCREEN_HEIGHT, GRID_SPACING):
-        pygame.draw.line(surface, GRID_COLOR, (0, y), (SCREEN_WIDTH, y))
-def main():
-    pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("Forgiving Platformer Hitbox")
-    clock = pygame.time.Clock()
+        pg.draw.line(surface, GRID_COLOR, (0, y), (SCREEN_WIDTH, y))
 
-    # Start player at correct grounded position
+# -------- ASYNC main (required for pygbag) --------
+async def main():
+    pg.init()
+    screen = pg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pg.display.set_caption("Forgiving Platformer Hitbox (Web)")
+    clock = pg.time.Clock()
+
+    # Let the web FS mount before heavy work
+    await asyncio.sleep(0)
 
     indexlevel = 0
-    platforms, portal, springs, springsv, x, y, spikes = leveldata(indexlevel)
-    player = Player(x, y)
-
-
+    platforms, portal, springs, springsv, start_x, start_y, spikes = leveldata(indexlevel)
+    player = Player(start_x, start_y)
 
     running = True
     while running:
-        clock.tick(FPS)
-        keys = pygame.key.get_pressed()
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
                 running = False
 
+        keys = pg.key.get_pressed()
         player.handle_input(keys)
-        player.update(platforms, springs, springsv, spikes)
+        hit_spike = player.update(platforms, springs, springsv, spikes)
+
+        # Respawn instead of hard exit() when hitting spikes
+        if hit_spike:
+            player.rect.topleft = (start_x, start_y)
+            player.vel_x = 0
+            player.vel_y = 0
+
+        # Level advance
         if portal and player.rect.colliderect(portal.rect):
             indexlevel += 1
-            platforms, portal, springs, springsv, x, y, spikes = leveldata(indexlevel)
+            platforms, portal, springs, springsv, start_x, start_y, spikes = leveldata(indexlevel)
+            player.rect.topleft = (start_x, start_y)
+            player.vel_x = 0
             player.vel_y = 0
-            player.rect.x = x
-            player.rect.y = y
 
-        # Draw scene
+        # ---- draw ----
         screen.fill(BG_COLOR)
         draw_grid(screen)
         for plat in platforms:
-            pygame.draw.rect(screen, PLATFORM_COLOR, plat)
+            pg.draw.rect(screen, PLATFORM_COLOR, plat)
         for spring in springs:
             spring.draw(screen)
         for sprin in springsv:
             sprin.draw(screen)
         for spike in spikes:
             spike.draw(screen)
-            pygame.draw.rect(screen, (255, 0, 0), spike.rect, 2)  # Hitbox debug
+            pg.draw.rect(screen, (255, 0, 0), spike.rect, 2)  # debug
         if portal:
             portal.draw(screen)
         player.draw(screen)
-        pygame.draw.rect(screen, (255, 0, 0), player.rect, 2)  # Hitbox debug
+        #pg.draw.rect(screen, (255, 0, 0), player.rect, 2)      # debug
 
-        pygame.display.flip()
+        pg.display.flip()
 
-    pygame.quit()
+        # CRUCIAL for web
+        await asyncio.sleep(0)
+        clock.tick(FPS)
+
+    pg.quit()
     sys.exit()
 
-
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
